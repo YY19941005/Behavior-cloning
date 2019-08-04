@@ -4,6 +4,7 @@ import random
 import csv
 import cv2
 import json
+import keras
 import h5py
 
 from sklearn.utils import shuffle
@@ -12,6 +13,46 @@ from keras.layers import Activation, Dense, Dropout, ELU, Flatten, LSTM, Lambda,
 from keras.layers.convolutional import Convolution2D, Cropping2D
 from keras.models import Sequential, Model, load_model, model_from_json
 from keras.regularizers import l2
+import matplotlib.pyplot as plt
+
+
+#写一个LossHistory类，保存loss和acc
+class LossHistory(keras.callbacks.Callback):
+    def on_train_begin(self, logs={}):
+        self.losses = {'batch':[], 'epoch':[]}
+        self.accuracy = {'batch':[], 'epoch':[]}
+        self.val_loss = {'batch':[], 'epoch':[]}
+        self.val_acc = {'batch':[], 'epoch':[]}
+
+    def on_batch_end(self, batch, logs={}):
+        self.losses['batch'].append(logs.get('loss'))
+        self.accuracy['batch'].append(logs.get('acc'))
+        self.val_loss['batch'].append(logs.get('val_loss'))
+        self.val_acc['batch'].append(logs.get('val_acc'))
+
+    def on_epoch_end(self, batch, logs={}):
+        self.losses['epoch'].append(logs.get('loss'))
+        self.accuracy['epoch'].append(logs.get('acc'))
+        self.val_loss['epoch'].append(logs.get('val_loss'))
+        self.val_acc['epoch'].append(logs.get('val_acc'))
+
+    def loss_plot(self, loss_type):
+        iters = range(len(self.losses[loss_type]))
+        plt.figure()
+        # acc
+        plt.plot(iters, self.accuracy[loss_type], 'r', label='train acc')
+        # loss
+        plt.plot(iters, self.losses[loss_type], 'g', label='train loss')
+        if loss_type == 'epoch':
+            # val_acc
+            plt.plot(iters, self.val_acc[loss_type], 'b', label='val acc')
+            # val_loss
+            plt.plot(iters, self.val_loss[loss_type], 'k', label='val loss')
+        plt.grid(True)
+        plt.xlabel(loss_type)
+        plt.ylabel('acc-loss')
+        plt.legend(loc="upper right")
+        plt.show()
 
 
 def get_csv_data(log_file):
@@ -168,9 +209,13 @@ if __name__=="__main__":
     # Get model, print summary, and train using a generator
     model = get_model()
     model.summary()
-    model.fit_generator(generate_batch(X_train, y_train), samples_per_epoch=24000, nb_epoch=28, validation_data=generate_batch(X_validation, y_validation), nb_val_samples=1024)#, callbacks=[early_stop])
+    history = LossHistory()
+    model.fit_generator(generate_batch(X_train, y_train), samples_per_epoch=24, nb_epoch=28, validation_data=generate_batch(X_validation, y_validation), nb_val_samples=1024,
+    callbacks=[history]),
 
     print('Saving model weights and configuration file.')
+    # 绘制acc-loss曲线
+    history.loss_plot('epoch')
     # Save model weights
     model.save_weights('model.h5')
     # Save model architecture as json file
